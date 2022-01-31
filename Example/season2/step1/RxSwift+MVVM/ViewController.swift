@@ -59,20 +59,42 @@ class ViewController: UIViewController {
     
     func downloadJson(_ url: String) -> Observable<String?> {
         // 1. 비동기로 생기는 데이터를 Observable로 감싸서 리턴하는 방법
-        return Observable.create() { f in
-            DispatchQueue.global().async {
-                let url = URL(string: MEMBER_LIST_URL)!
-                let data = try! Data(contentsOf: url)
-                let json = String(data: data, encoding: .utf8)
-                
-                DispatchQueue.main.async {
-                    f.onNext(json)
-                    f.onCompleted()
+        
+        return Observable.create() { emitter in
+           let url = URL(string: url)!
+            let task = URLSession.shared.dataTask(with: url) { data, _, error in
+                guard error == nil else {
+                    emitter.onError(error!)
+                    return
                 }
+                
+                if let data = data, let json = String(data: data, encoding: .utf8) {
+                    emitter.onNext(json)
+                }
+                emitter.onCompleted()
             }
             
-            return Disposables.create()
+            task.resume()
+            
+            return Disposables.create() {
+                task.cancel()
+            }
         }
+        
+//        return Observable.create() { f in
+//            DispatchQueue.global().async {
+//                let url = URL(string: MEMBER_LIST_URL)!
+//                let data = try! Data(contentsOf: url)
+//                let json = String(data: data, encoding: .utf8)
+//
+//                DispatchQueue.main.async {
+//                    f.onNext(json)
+//                    f.onCompleted()
+//                }
+//            }
+//
+//            return Disposables.create()
+//        }
     }
     
 //    func downloadJson(_ url: String) -> 나중에생기는데이터<String?> {
@@ -106,9 +128,10 @@ class ViewController: UIViewController {
         downloadJson(MEMBER_LIST_URL).subscribe { [weak self] event in
             switch event {
             case .next(let json):
-                self?.editView.text = json
-                self?.setVisibleWithAnimation(self?.activityIndicator, false)
-                
+                DispatchQueue.main.async {
+                    self?.editView.text = json
+                    self?.setVisibleWithAnimation(self?.activityIndicator, false)
+                }
             case .completed:
                 break
             case .error:
