@@ -40,13 +40,14 @@ class ViewController: UIViewController {
     @IBOutlet var timerLabel: UILabel!
     @IBOutlet var editView: UITextView!
 
+    private var disposeBag = DisposeBag()
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.timerLabel.text = "\(Date().timeIntervalSince1970)"
         }
     }
-
     private func setVisibleWithAnimation(_ v: UIView?, _ s: Bool) {
         guard let v = v else { return }
         UIView.animate(withDuration: 0.3, animations: { [weak v] in
@@ -57,8 +58,26 @@ class ViewController: UIViewController {
     }
 
     
-    func downloadJson(_ url: String) -> Observable<String?> {
+    func downloadJson(_ url: String) -> Observable<String> {
         // 1. 비동기로 생기는 데이터를 Observable로 감싸서 리턴하는 방법
+        
+        // Observable의 생명 주기
+        // 1. Create
+        // 2. Subscribe
+        // 3. onNext
+        // 4. onCompleted / onError
+        // 5. Disposed
+        
+//        동일 코드 1
+//        return Observable.just("Hello World")
+//        return Observable.create { emitter in
+//            emitter.onNext("Hello World")
+//            emitter.onCompleted()
+//            return Disposables.create()
+//        }
+        
+        // 여러개를 넘기고 싶을 떄
+//        return Observable.from(["Hello", "World"])
         
         return Observable.create() { emitter in
            let url = URL(string: url)!
@@ -67,15 +86,16 @@ class ViewController: UIViewController {
                     emitter.onError(error!)
                     return
                 }
-                
+
                 if let data = data, let json = String(data: data, encoding: .utf8) {
                     emitter.onNext(json)
                 }
+
                 emitter.onCompleted()
             }
-            
+
             task.resume()
-            
+
             return Disposables.create() {
                 task.cancel()
             }
@@ -125,20 +145,29 @@ class ViewController: UIViewController {
 //        }
         
         // 2. Observable로 오는 데이터를 받아서 처리하는 방법
-        downloadJson(MEMBER_LIST_URL).subscribe { [weak self] event in
-            switch event {
-            case .next(let json):
-                DispatchQueue.main.async {
-                    self?.editView.text = json
-                    self?.setVisibleWithAnimation(self?.activityIndicator, false)
-                }
-            case .completed:
-                break
-            case .error:
-                break
-            }
-        }
+        let jsonObservable = downloadJson(MEMBER_LIST_URL)
+        let helloObservable = Observable.just("Hello World")
+        
+        Observable.zip(jsonObservable, helloObservable) { $1 + "\n" + $0}
+        .observeOn(MainScheduler.instance)
+        .subscribe(onNext: { json in
+            self.editView.text = json
+            self.setVisibleWithAnimation(self.activityIndicator, false)
+        }).disposed(by: disposeBag)
         
         
+//        downloadJson(MEMBER_LIST_URL).subscribe { [weak self] event in
+//            switch event {
+//            case .next(let json):
+//                DispatchQueue.main.async {
+//                    self?.editView.text = json
+//                    self?.setVisibleWithAnimation(self?.activityIndicator, false)
+//                }
+//            case .completed:
+//                break
+//            case .error:
+//                break
+//            }
+//        }
     }
 }
